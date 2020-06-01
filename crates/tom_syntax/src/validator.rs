@@ -34,7 +34,7 @@ pub(crate) fn validate(doc: &TomlDoc) -> Vec<SyntaxError> {
 
 fn check_table<'a>(
     errors: &mut Vec<SyntaxError>,
-    table: impl ast::EntryOwner<'a> + ast::TableHeaderOwner<'a>,
+    table: impl ast::EntriesOwner<'a> + ast::TableHeaderOwner<'a>,
 ) {
     let header = table.header();
     let first = header.syntax().children().next();

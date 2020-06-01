@@ -2,26 +2,77 @@
 
 mod generated;
 
-use std::borrow::Cow;
+use std::{marker::PhantomData, borrow::Cow};
 
-use crate::{ast, AstNode, AstChildren};
+use crate::{SyntaxNode, ast, SyntaxNodeChildren};
 pub use self::generated::*;
 
-pub trait EntryOwner<'a>: AstNode<'a> {
-    fn entries(self) -> AstChildren<'a, ast::Entry<'a>>;
+pub trait AstNode {
+    fn cast(syntax: SyntaxNode) -> Option<Self>
+    where
+        Self: Sized;
+    fn syntax(&self) -> &SyntaxNode;
+}
+
+/// An iterator over `SyntaxNode` children of a particular AST type.
+#[derive(Debug, Clone)]
+pub struct AstChildren<N> {
+    inner: SyntaxNodeChildren,
+    brand: PhantomData<N>,
+}
+
+impl<N> AstChildren<N> {
+    fn new(parent: &SyntaxNode) -> Self {
+        AstChildren { inner: parent.children(), brand: PhantomData }
+    }
+}
+
+impl<N: AstNode> Iterator for AstChildren<N> {
+    type Item = N;
+    fn next(&mut self) -> Option<N> {
+        self.inner.by_ref().find_map(N::cast)
+    }
+}
+
+mod support {
+    use super::{AstChildren, AstNode, SyntaxKind, SyntaxNode, SyntaxToken};
+
+    pub(super) fn child<N: AstNode>(parent: &SyntaxNode) -> Option<N> {
+        parent.children().find_map(N::cast)
+    }
+
+    pub(super) fn children<N: AstNode>(parent: &SyntaxNode) -> AstChildren<N> {
+        AstChildren::new(parent)
+    }
+
+    pub(super) fn token(parent: &SyntaxNode, kind: SyntaxKind) -> Option<SyntaxToken> {
+        parent.children_with_tokens().filter_map(|it| it.into_token()).find(|it| it.kind() == kind)
+    }
+}
+
+
+
+pub trait EntriesOwner: AstNode {
+    fn entries(&self) -> AstChildren<ast::Entry> {
+        support::children(self.syntax())
+    }
     // fn append_entry(self, entry: ast::Entry);
 }
 
-pub trait TableHeaderOwner<'a>: AstNode<'a> {
-    fn header(self) -> ast::TableHeader<'a>;
+pub trait TableHeaderOwner: AstNode {
+    fn header(&self) -> ast::TableHeader {
+        support::child(self.syntax())
+    }
 }
 
-pub trait KeyOwner<'a>: AstNode<'a> {
-    fn keys(self) -> AstChildren<'a, ast::Key<'a>>;
+pub trait KeysOwner: AstNode {
+    fn keys(&self) -> AstChildren<ast::Key> {
+        support::children(self.syntax())
+    }
 }
 
-impl<'a> ast::Key<'a> {
-    pub fn name(self) -> Cow<'a, str> {
+impl ast::Key {
+    pub fn name(&self) -> Cow<'_, str> {
         match self.kind() {
             ast::KeyKind::StringLit(lit) => lit.value(),
             ast::KeyKind::BareKey(key) => Cow::from(key.text()),
@@ -29,8 +80,8 @@ impl<'a> ast::Key<'a> {
     }
 }
 
-impl<'a> ast::StringLit<'a> {
-    pub fn value(self) -> Cow<'a, str> {
+impl ast::StringLit {
+    pub fn value(&self) -> Cow<'_, str> {
         //FIXME: broken completely
         let text = self.text();
         let len = text.len();
@@ -38,26 +89,32 @@ impl<'a> ast::StringLit<'a> {
     }
 }
 
-impl<'a> ast::Bool<'a> {
-    pub fn value(self) -> bool {
+impl ast::Bool {
+    pub fn value(&self) -> bool {
         self.text() == "true"
     }
 }
 
-impl<'a> ast::Number<'a> {
-    pub fn value(self) -> i64 {
+impl ast::IntNumber {
+    pub fn value(&self) -> i64 {
         self.text().parse().unwrap()
     }
 }
 
-impl<'a> ast::DateTime<'a> {
+impl ast::FloatNumber {
+    pub fn value(&self) -> f64 {
+        self.text().parse().unwrap()
+    }
+}
+
+impl ast::DateTime {
     // chrono?
     pub fn value(self) -> ::std::time::SystemTime {
         unimplemented!()
     }
 }
 
-impl<'a> ast::Value<'a> {
+impl ast::Value {
     pub fn as_string(self) -> Option<Cow<'a, str>> {
         match self.kind() {
             ast::ValueKind::StringLit(l) => Some(l.value()),
@@ -77,80 +134,5 @@ impl<'a> ast::Value<'a> {
             ast::ValueKind::Number(l) => Some(l.value()),
             _ => None,
         }
-    }
-}
-
-impl<'a> EntryOwner<'a> for ast::Dict<'a> {
-    fn entries(self) -> AstChildren<'a, ast::Entry<'a>> {
-        self.entries()
-    }
-
-    //     fn append_entry(self, doc: &mut TomlDoc, entry: Entry) {
-    //         match self.entries(doc).last() {
-    //             Some(old_entry) => {
-    //                 let comma = doc.new_comma();
-    //                 doc.insert(comma, After(old_entry.into()));
-    //                 doc.insert(entry, After(comma));
-    //             }
-    //             None => {
-    //                 let l_curly = self.cst().children(doc).first().unwrap();
-    //                 doc.insert(entry, After(l_curly));
-    //                 return;
-    //             }
-    //         }
-    //     }
-}
-
-impl<'a> EntryOwner<'a> for ast::Table<'a> {
-    fn entries(self) -> AstChildren<'a, ast::Entry<'a>> {
-        self.entries()
-    }
-    // fn append_entry(self, doc: &mut TomlDoc, entry: Entry) {
-    //     doc.insert(entry, AppendTo(self.cst()));
-    // }
-}
-
-impl<'a> EntryOwner<'a> for ast::ArrayTable<'a> {
-    fn entries(self) -> AstChildren<'a, ast::Entry<'a>> {
-        self.entries()
-    }
-    // fn append_entry(self, doc: &mut TomlDoc, entry: Entry) {
-    //     doc.insert(entry, AppendTo(self.cst()));
-    // }
-}
-
-impl<'a> EntryOwner<'a> for ast::Doc<'a> {
-    fn entries(self) -> AstChildren<'a, ast::Entry<'a>> {
-        self.entries()
-    }
-    // fn append_entry(self, doc: &mut TomlDoc, entry: Entry) {
-    //     match self.entries(doc).last() {
-    //         Some(old_entry) => doc.insert(entry, After(old_entry.into())),
-    //         None => doc.insert(entry, PrependTo(self.into())),
-    //     }
-    // }
-}
-
-impl<'a> TableHeaderOwner<'a> for ast::Table<'a> {
-    fn header(self) -> ast::TableHeader<'a> {
-        self.header()
-    }
-}
-
-impl<'a> TableHeaderOwner<'a> for ast::ArrayTable<'a> {
-    fn header(self) -> ast::TableHeader<'a> {
-        self.header()
-    }
-}
-
-impl<'a> KeyOwner<'a> for ast::TableHeader<'a> {
-    fn keys(self) -> AstChildren<'a, ast::Key<'a>> {
-        self.keys()
-    }
-}
-
-impl<'a> KeyOwner<'a> for ast::Entry<'a> {
-    fn keys(self) -> AstChildren<'a, ast::Key<'a>> {
-        self.keys()
     }
 }

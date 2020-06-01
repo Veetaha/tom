@@ -2,8 +2,8 @@
 
 uncover::define_uncover_macros!(enable_if(cfg!(debug_assertions)));
 
-mod chunked_text;
-mod rtree;
+mod syntax_node;
+mod syntax_error;
 mod parser;
 // mod model;
 // mod visitor;
@@ -16,47 +16,28 @@ pub mod symbol;
 use std::{num::NonZeroU8, marker::PhantomData};
 
 // pub use edit::{IntoValue, Position};
-pub use rowan::{SmolStr, TextRange, TextUnit, WalkEvent};
 // pub use model::{Item, Map};
-pub use rtree::{SyntaxNode, SyntaxNodeRef, RefRoot, OwnedRoot, SyntaxNodeChildren, TreeRoot, TomTypes};
-pub(crate) use rtree::GreenBuilder;
-pub(crate) use chunked_text::ChunkedText;
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+// TODO: remove TextUnit:
+pub use rowan::{SmolStr, TextRange, TextSize, TextSize as TextUnit, WalkEvent};
+
+pub use syntax_node::{SyntaxNode, SyntaxNodeChildren};
+pub use syntax_error::SyntaxError;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Symbol(NonZeroU8);
 
-impl Symbol {
-    pub fn name(self) -> &'static str {
-        self.info().0
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct SyntaxError {
-    range: TextRange,
-    message: String,
-}
-
-impl SyntaxError {
-    pub fn range(&self) -> TextRange {
-        self.range
-    }
-
-    pub fn message(&self) -> &str {
-        self.message.as_str()
-    }
-}
-
 #[derive(Clone)]
-pub struct TomlDoc {
-    root: rtree::SyntaxNode,
+pub struct Parse {
+    // TODO: change to `ast::Doc` or `ast::SourceFile` (it doesn't exist yet)
+    root: SyntaxNode,
     validation_errors: Vec<SyntaxError>,
 }
 
-impl TomlDoc {
-    pub fn new(text: &str) -> TomlDoc {
+impl Parse {
+    pub fn new(text: &str) -> Parse {
         let root = parser::parse(text);
-        let mut doc = TomlDoc {
+        let mut doc = Parse {
             root,
             validation_errors: Vec::new(),
         };
@@ -100,7 +81,7 @@ impl TomlDoc {
                     buff.push_str(&String::from("  ").repeat(level));
                     let range = node.range();
                     let symbol = node.symbol();
-                    buff.push_str(&format!("{}@{:?}", symbol.name(), range));
+                    buff.push_str(&format!("{}@{:?}", symbol, range));
                     if let Some(text) = node.leaf_text() {
                         if !text.chars().all(char::is_whitespace) {
                             buff.push_str(&format!(" {:?}", text));
@@ -125,39 +106,5 @@ impl TomlDoc {
             }
         }
         buff
-    }
-}
-
-pub trait AstNode<'a>: Clone + Copy + 'a {
-    fn cast(syntax: SyntaxNodeRef<'a>) -> Option<Self>
-    where
-        Self: Sized;
-    fn syntax(self) -> SyntaxNodeRef<'a>;
-}
-
-pub struct AstChildren<'a, A> {
-    inner: SyntaxNodeChildren<RefRoot<'a>>,
-    phantom: PhantomData<A>,
-}
-
-impl<'a, A: AstNode<'a>> AstChildren<'a, A> {
-    fn new(node: SyntaxNodeRef<'a>) -> Self {
-        AstChildren {
-            inner: node.children(),
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<'a, A: AstNode<'a>> Iterator for AstChildren<'a, A> {
-    type Item = A;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(node) = self.inner.next() {
-            if let Some(a) = A::cast(node) {
-                return Some(a);
-            }
-        }
-        None
     }
 }
