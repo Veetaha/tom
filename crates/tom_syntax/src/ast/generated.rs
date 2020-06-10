@@ -1,32 +1,32 @@
 //! Generated file, do not edit by hand, see `xtask/src/codegen`
 
 use crate::{
-    SyntaxNode, SyntaxNodeRef, AstNode, AstChildren, TreeRoot, RefRoot, OwnedRoot, TomTypes,
+    SyntaxNode, SyntaxNodeRef, AstNode, AstChildren, TreeRoot, RefRoot, OwnedRoot, TomlLanguage,
     symbol::*,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DocNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct DocNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type Doc<'a> = DocNode<RefRoot<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TableNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct TableNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type Table<'a> = TableNode<RefRoot<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ArrayTableNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct ArrayTableNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type ArrayTable<'a> = ArrayTableNode<RefRoot<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TableHeaderNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct TableHeaderNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type TableHeader<'a> = TableHeaderNode<RefRoot<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct EntryNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct EntryNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type Entry<'a> = EntryNode<RefRoot<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct KeyNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct KeyNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type Key<'a> = KeyNode<RefRoot<'a>>;
 
 pub enum KeyKind<'a> {
@@ -35,7 +35,7 @@ pub enum KeyKind<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ValueNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct ValueNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type Value<'a> = ValueNode<RefRoot<'a>>;
 
 pub enum ValueKind<'a> {
@@ -48,31 +48,31 @@ pub enum ValueKind<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StringLitNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct StringLitNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type StringLit<'a> = StringLitNode<RefRoot<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BareKeyNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct BareKeyNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type BareKey<'a> = BareKeyNode<RefRoot<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ArrayNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct ArrayNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type Array<'a> = ArrayNode<RefRoot<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DictNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct DictNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type Dict<'a> = DictNode<RefRoot<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NumberNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct NumberNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type Number<'a> = NumberNode<RefRoot<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BoolNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct BoolNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type Bool<'a> = BoolNode<RefRoot<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DateTimeNode<R: TreeRoot<TomTypes> = OwnedRoot>(SyntaxNode<R>);
+pub struct DateTimeNode<R: TreeRoot<TomlLanguage> = OwnedRoot>(SyntaxNode<R>);
 pub type DateTime<'a> = DateTimeNode<RefRoot<'a>>;
 
 impl<'a> AstNode<'a> for Doc<'a> {

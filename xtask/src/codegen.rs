@@ -6,6 +6,8 @@
 //! This module's submodules define specific bits that we generate.
 
 mod gen_ast;
+mod ast_src;
+mod gen_syntax;
 mod gen_parser_tests;
 mod gen_symbols;
 
@@ -42,6 +44,8 @@ fn verify_or_overwrite(mode: Mode, file_path: &Path, expected: &str) -> Result<(
         s.replace("\r\n", "\n")
     }
 }
+
+const SYNTAX_KINDS: &str = "crates/tom_syntax/src/ast/generated"
 
 const AST_NODES_OUT_FILE_PATH: &str = "crates/tom_syntax/src/ast/generated.rs";
 const SYMBOLS_OUT_FILE_PATH: &str = "crates/tom_syntax/src/symbol/generated.rs";

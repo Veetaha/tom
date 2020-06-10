@@ -3,7 +3,7 @@
 use m_lexer::{Lexer, LexerBuilder, TokenKind};
 use lazy_static::lazy_static;
 
-use crate::{symbol, Symbol, TextRange, TextUnit};
+use crate::{symbol, Symbol, TextRange, TextSize};
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct Token {
@@ -13,10 +13,7 @@ pub(crate) struct Token {
 
 impl Token {
     pub fn is_significant(self) -> bool {
-        match self.symbol {
-            symbol::WHITESPACE | symbol::COMMENT => false,
-            _ => true,
-        }
+        !matches!(self.symbol, symbol::WHITESPACE | symbol::COMMENT)
     }
 }
 
@@ -27,16 +24,23 @@ pub(crate) struct Tokens {
 }
 
 pub(crate) fn tokenize(input: &str) -> Tokens {
-    let mut raw_tokens = Vec::new();
-    let mut offset = TextUnit::from(0);
-    for t in LEXER.tokenize(input) {
-        let len = TextUnit::from(t.len as u32);
-        raw_tokens.push(Token {
-            symbol: Symbol::new(t.kind.0),
-            range: TextRange::offset_len(offset, len),
-        });
-        offset += len;
-    }
+    let raw_tokens = LEXER.tokenize(input)
+        .iter()
+        .enumerate()
+        .map({
+            let mut offset: TextSize = 0.into();
+            |token| {
+                let len: TextSize = token.len.try_into().unwrap();
+                let token_offset = offset;
+                offset += len;
+                Token {
+                    symbol: Symbol::new(token.kind.0),
+                    range: TextRange::at(token_offset, len),
+                }
+            }
+        })
+        .collect();
+
     let significant = raw_tokens
         .iter()
         .enumerate()

@@ -3,11 +3,11 @@
 mod grammar;
 mod lexer;
 
-use crate::{symbol::*, SyntaxNode, GreenBuilder, Symbol, SmolStr, TextRange, SyntaxError};
+use crate::{symbol::*, SyntaxNode, Symbol, SmolStr, TextRange, SyntaxError, syntax_node::SyntaxTreeBuilder};
 
 pub(crate) fn parse(input: &str) -> SyntaxNode {
     let tokens = lexer::tokenize(input);
-    let mut sink = EventSink::new(input, &tokens);
+    let mut sink = TextTreeSink::new(input, &tokens);
     {
         let mut parser = Parser {
             sink: &mut sink,
@@ -21,26 +21,31 @@ pub(crate) fn parse(input: &str) -> SyntaxNode {
 }
 
 struct Parser<'s, 't: 's> {
-    sink: &'s mut EventSink<'t>,
+    sink: &'s mut TextTreeSink<'t>,
     tokens: &'t lexer::Tokens,
     pos: usize,
 }
 
-struct EventSink<'t> {
-    pos: usize,
+/// Bridges the parser with our specific syntax tree representation.
+///
+/// `TextTreeSink` also handles attachment of trivia (whitespace) to nodes.
+struct TextTreeSink<'t> {
     text: &'t str,
     tokens: &'t lexer::Tokens,
-    builder: GreenBuilder,
+    // TODO: add this to track current position (and to report errors with positions)
+    // text_pos: TextSize,
+    token_pos: usize,
+    builder: SyntaxTreeBuilder,
     errors: Vec<SyntaxError>,
 }
 
-impl<'t> EventSink<'t> {
+impl<'t> TextTreeSink<'t> {
     fn new(text: &'t str, tokens: &'t lexer::Tokens) -> Self {
-        EventSink {
-            pos: 0,
+        TextTreeSink {
+            token_pos: 0,
             text,
             tokens,
-            builder: GreenBuilder::new(),
+            builder: SyntaxTreeBuilder::default(),
             errors: Vec::new(),
         }
     }
@@ -64,7 +69,7 @@ impl<'t> EventSink<'t> {
     }
 
     fn token(&mut self, pos: usize, s: Option<Symbol>) {
-        while self.pos < pos {
+        while self.token_pos < pos {
             self.bump(None)
         }
         self.bump(s);
@@ -72,14 +77,12 @@ impl<'t> EventSink<'t> {
 
     fn error(&mut self, message: impl Into<String>) {
         if self.tokens.raw_tokens.is_empty() {
-            self.errors.push(SyntaxError {
-                range: TextRange::from_to(0.into(), 0.into()),
-                message: message.into(),
-            });
+            // TODO: set proper range
+            self.errors.push(SyntaxError::new(message, TextRange::empty(0.into())));
             return;
         }
 
-        let mut pos = self.pos;
+        let mut pos = self.token_pos;
         if pos == self.tokens.raw_tokens.len() {
             pos -= 1;
         }
@@ -98,10 +101,7 @@ impl<'t> EventSink<'t> {
             pos += 1;
         }
 
-        self.errors.push(SyntaxError {
-            range: tok.range,
-            message: message.into(),
-        })
+        self.errors.push(SyntaxError::new(message, tok.range))
     }
 
     fn leading_ws(&self, ws: &[lexer::Token], s: Symbol) -> usize {
@@ -155,7 +155,7 @@ impl<'t> EventSink<'t> {
     }
 
     fn whitespace(&self) -> &'t [lexer::Token] {
-        let start = self.pos;
+        let start = self.token_pos;
         let mut end = start;
         loop {
             match &self.tokens.raw_tokens.get(end) {
@@ -167,10 +167,10 @@ impl<'t> EventSink<'t> {
     }
 
     fn bump(&mut self, s: Option<Symbol>) {
-        let t = self.tokens.raw_tokens[self.pos];
+        let t = self.tokens.raw_tokens[self.token_pos];
         let s = s.unwrap_or(t.symbol);
         let text: SmolStr = self.text[t.range].into();
         self.builder.leaf(s, text);
-        self.pos += 1;
+        self.token_pos += 1;
     }
 }

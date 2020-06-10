@@ -2,7 +2,7 @@
 
 mod generated;
 
-use std::{fmt, num::NonZeroU8};
+use std::{fmt, num::NonZeroU8, convert::TryInto};
 
 use crate::Symbol;
 
@@ -12,7 +12,8 @@ pub(crate) struct SymbolInfo(pub &'static str);
 
 impl Symbol {
     pub(crate) fn new(idx: u16) -> Symbol {
-        Symbol(NonZeroU8::new(idx as u8).unwrap())
+        let idx: u8 = idx.try_into().unwrap();
+        Symbol(NonZeroU8::new(idx).unwrap())
     }
 
     pub(crate) fn info(&self) -> &SymbolInfo {

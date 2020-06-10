@@ -28,7 +28,7 @@ impl<'t, 's> Parser<'t, 's> {
         self.sink.finish(m.symbol);
     }
 
-    fn error(&mut self, msg: &str) {
+    fn error(&mut self, msg: impl Into<String>) {
         self.sink.error(msg);
     }
 
@@ -46,18 +46,10 @@ impl<'t, 's> Parser<'t, 's> {
     }
 
     fn eat(&mut self, s: Symbol) {
-        let msg = match s {
-            COMMA => "expected `,`",
-            EQ => "expected `=`",
-            DOT => "expected `.`",
-            R_BRACK => "expected `]`",
-            R_CURLY => "expected `}`",
-            _ => unimplemented!("msg for {:?}", s),
-        };
         if self.current() == s {
             self.bump()
         } else {
-            self.bump_error(msg)
+            self.bump_error(format!("expected {:?}", s))
         }
     }
 
@@ -79,7 +71,7 @@ impl<'t, 's> Parser<'t, 's> {
         self.pos += 1;
     }
 
-    fn bump_error(&mut self, msg: &str) {
+    fn bump_error(&mut self, msg: impl Into<String>) {
         match self.current() {
             EOF => {
                 self.error(msg);
