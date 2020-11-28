@@ -1,10 +1,14 @@
 //! FIXME: write short doc here
 
-use crate::{SyntaxNodeRef, SyntaxError, TextRange, TomlDoc, ChunkedText, ast};
+use crate::{
+    AstNode, SyntaxError, TextRange,
+    ast::{self, KeysOwner},
+    SyntaxNode,
+};
 
-pub(crate) fn validate(doc: &TomlDoc) -> Vec<SyntaxError> {
+pub(crate) fn validate(doc: &ast::Doc) -> Vec<SyntaxError> {
     let mut errors = Vec::new();
-    for node in doc.cst().descendants() {
+    for node in doc.syntax().descendants() {
         if let Some(entry) = ast::Entry::cast(node) {
             if let Some(first_key) = entry.keys().next() {
                 check_new_line(
@@ -34,7 +38,7 @@ pub(crate) fn validate(doc: &TomlDoc) -> Vec<SyntaxError> {
 
 fn check_table<'a>(
     errors: &mut Vec<SyntaxError>,
-    table: impl ast::EntryOwner<'a> + ast::TableHeaderOwner<'a>,
+    table: impl ast::EntriesOwner + ast::TableHeaderOwner,
 ) {
     let header = table.header();
     let first = header.syntax().children().next();
@@ -65,12 +69,11 @@ enum Requirement {
     Forbid,
     Require,
 }
-use self::Requirement::*;
 
 fn check_new_line<'a>(
     errors: &mut Vec<SyntaxError>,
-    left: impl Into<SyntaxNodeRef<'a>>,
-    right: impl Into<SyntaxNodeRef<'a>>,
+    left: impl Into<SyntaxNode>,
+    right: impl Into<SyntaxNode>,
     r: Requirement,
     msg: &str,
 ) {
@@ -83,7 +86,7 @@ fn check_new_line<'a>(
     let end = right.range().start();
     let range = TextRange::from_to(start, end);
     let has_newline = parent.chunked_substring(range).contains_char('\n');
-    if has_newline != (r == Require) {
+    if has_newline != (r == Requirement::Require) {
         errors.push(SyntaxError {
             range,
             message: msg.into(),

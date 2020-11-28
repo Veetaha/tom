@@ -4,7 +4,7 @@ use crate::{project_root_dir, codegen, reformat};
 use anyhow::Result;
 
 pub fn gen_symbols(mode: codegen::Mode) -> Result<()> {
-    let out_file = project_root_dir().join(codegen::SYMBOLS_OUT_FILE_PATH);
+    let out_file = project_root_dir().join(codegen::SYNTAX_KINDS_OUT_FILE_PATH);
     codegen::verify_or_overwrite(mode, &out_file, &reformat(symbols_source_code())?)
 }
 

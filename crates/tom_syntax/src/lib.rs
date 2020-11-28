@@ -2,162 +2,138 @@
 
 uncover::define_uncover_macros!(enable_if(cfg!(debug_assertions)));
 
-mod chunked_text;
-mod rtree;
+mod syntax_node;
+mod syntax_error;
 mod parser;
 // mod model;
 // mod visitor;
 mod validator;
 // mod edit;
+mod syntax_kind;
 
 pub mod ast;
-pub mod symbol;
+// TODO: remove
+// pub mod symbol;
 
-use std::{num::NonZeroU8, marker::PhantomData};
+use std::{marker::PhantomData, rc::Rc};
 
 // pub use edit::{IntoValue, Position};
-pub use rowan::{SmolStr, TextRange, TextUnit, WalkEvent};
 // pub use model::{Item, Map};
-pub use rtree::{SyntaxNode, SyntaxNodeRef, RefRoot, OwnedRoot, SyntaxNodeChildren, TreeRoot, TomTypes};
-pub(crate) use rtree::GreenBuilder;
-pub(crate) use chunked_text::ChunkedText;
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Symbol(NonZeroU8);
+// TODO: remove TextUnit:
+pub use rowan::{SmolStr, TextRange, TextSize, TextSize as TextUnit, WalkEvent, GreenNode};
 
-impl Symbol {
-    pub fn name(self) -> &'static str {
-        self.info().0
+pub use syntax_node::{SyntaxNode, SyntaxToken, SyntaxNodeChildren};
+pub use syntax_kind::SyntaxKind;
+pub use syntax_error::SyntaxError;
+use ast::AstNode;
+use std::fmt::Write;
+
+/// `Parse` is the result of the parsing: a syntax tree and a collection of
+/// errors.
+///
+/// Note that we always produce a syntax tree, even for completely invalid
+/// files.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Parse<T> {
+    green: GreenNode,
+    errors: Rc<Vec<SyntaxError>>, // TODO: it was Arc<...>
+    _ty: PhantomData<fn() -> T>,
+}
+
+impl<T> Clone for Parse<T> {
+    fn clone(&self) -> Parse<T> {
+        Parse {
+            green: self.green.clone(),
+            errors: self.errors.clone(),
+            _ty: PhantomData,
+        }
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct SyntaxError {
-    range: TextRange,
-    message: String,
-}
-
-impl SyntaxError {
-    pub fn range(&self) -> TextRange {
-        self.range
+impl<T> Parse<T> {
+    fn new(green: GreenNode, errors: Vec<SyntaxError>) -> Parse<T> {
+        Parse {
+            green,
+            errors: Rc::new(errors),
+            _ty: PhantomData,
+        }
     }
 
-    pub fn message(&self) -> &str {
-        self.message.as_str()
+    pub fn syntax_node(&self) -> SyntaxNode {
+        SyntaxNode::new_root(self.green.clone())
     }
 }
 
-#[derive(Clone)]
-pub struct TomlDoc {
-    root: rtree::SyntaxNode,
-    validation_errors: Vec<SyntaxError>,
+impl<T: AstNode> Parse<T> {
+    pub fn to_syntax(self) -> Parse<SyntaxNode> {
+        Parse {
+            green: self.green,
+            errors: self.errors,
+            _ty: PhantomData,
+        }
+    }
+
+    pub fn tree(&self) -> T {
+        T::cast(self.syntax_node()).unwrap()
+    }
+
+    pub fn errors(&self) -> &[SyntaxError] {
+        &*self.errors
+    }
+
+    pub fn ok(self) -> Result<T, Rc<Vec<SyntaxError>>> {
+        // TODO: it was Arc<...>
+        if self.errors.is_empty() {
+            Ok(self.tree())
+        } else {
+            Err(self.errors)
+        }
+    }
 }
 
-impl TomlDoc {
-    pub fn new(text: &str) -> TomlDoc {
-        let root = parser::parse(text);
-        let mut doc = TomlDoc {
-            root,
-            validation_errors: Vec::new(),
-        };
+impl Parse<SyntaxNode> {
+    pub fn cast<N: AstNode>(self) -> Option<Parse<N>> {
+        if N::cast(self.syntax_node()).is_some() {
+            Some(Parse {
+                green: self.green,
+                errors: self.errors,
+                _ty: PhantomData,
+            })
+        } else {
+            None
+        }
+    }
+}
 
-        let validation_errors = validator::validate(&doc);
-        doc.validation_errors = validation_errors;
-
-        doc
+impl Parse<ast::Doc> {
+    pub fn debug_dump(&self) -> String {
+        let mut buf = format!("{:#?}", self.tree().syntax());
+        for err in self.errors.iter() {
+            writeln!(buf, "error {:?}: {}\n", err.range(), err).unwrap(); // TODO: replace with format_to!()
+        }
+        buf
     }
 
-    pub fn cst(&self) -> SyntaxNodeRef {
-        self.root.borrowed()
-    }
-
-    pub fn ast(&self) -> ast::Doc {
-        ast::Doc::cast(self.cst()).unwrap()
-    }
-    // pub(crate) fn replace_with(&self, replacement: GreenNode) -> GreenNode {
-    //     self.0.replace_with(replacement)
+    // TODO: implement or remove:
+    // pub fn reparse(&self, indel: &Indel) -> Parse<SourceFile> {
+    //     self.incremental_reparse(indel).unwrap_or_else(|| self.full_reparse(indel))
     // }
 
-    // pub fn model(&self) -> Map {
-    //     model::from_doc(self)
+    // fn incremental_reparse(&self, indel: &Indel) -> Option<Parse<SourceFile>> {
+    //     // FIXME: validation errors are not handled here
+    //     parsing::incremental_reparse(self.tree().syntax(), indel, self.errors.to_vec()).map(
+    //         |(green_node, errors, _reparsed_range)| Parse {
+    //             green: green_node,
+    //             errors: Arc::new(errors),
+    //             _ty: PhantomData,
+    //         },
+    //     )
     // }
 
-    pub fn errors(&self) -> Vec<SyntaxError> {
-        self.root
-            .root_data()
-            .iter()
-            .chain(self.validation_errors.iter())
-            .cloned()
-            .collect()
-    }
-
-    pub fn debug(&self) -> String {
-        let mut buff = String::new();
-        let mut level = 0;
-        for event in self.cst().preorder() {
-            match event {
-                WalkEvent::Enter(node) => {
-                    buff.push_str(&String::from("  ").repeat(level));
-                    let range = node.range();
-                    let symbol = node.symbol();
-                    buff.push_str(&format!("{}@{:?}", symbol.name(), range));
-                    if let Some(text) = node.leaf_text() {
-                        if !text.chars().all(char::is_whitespace) {
-                            buff.push_str(&format!(" {:?}", text));
-                        }
-                    }
-                    buff.push('\n');
-                    level += 1;
-                }
-                WalkEvent::Leave(_) => {
-                    level -= 1;
-                }
-            }
-        }
-
-        let errors = self.errors();
-        if !errors.is_empty() {
-            let text = self.cst().get_text();
-            buff += "\n";
-            for e in errors {
-                let text = &text[e.range];
-                buff += &format!("error@{:?} {:?}: {}\n", e.range(), text, e.message());
-            }
-        }
-        buff
-    }
-}
-
-pub trait AstNode<'a>: Clone + Copy + 'a {
-    fn cast(syntax: SyntaxNodeRef<'a>) -> Option<Self>
-    where
-        Self: Sized;
-    fn syntax(self) -> SyntaxNodeRef<'a>;
-}
-
-pub struct AstChildren<'a, A> {
-    inner: SyntaxNodeChildren<RefRoot<'a>>,
-    phantom: PhantomData<A>,
-}
-
-impl<'a, A: AstNode<'a>> AstChildren<'a, A> {
-    fn new(node: SyntaxNodeRef<'a>) -> Self {
-        AstChildren {
-            inner: node.children(),
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<'a, A: AstNode<'a>> Iterator for AstChildren<'a, A> {
-    type Item = A;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(node) = self.inner.next() {
-            if let Some(a) = A::cast(node) {
-                return Some(a);
-            }
-        }
-        None
-    }
+    // fn full_reparse(&self, indel: &Indel) -> Parse<ast::Doc> {
+    //     let mut text = self.tree().syntax().text().to_string();
+    //     indel.apply(&mut text);
+    //     SourceFile::parse(&text)
+    // }
 }

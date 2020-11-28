@@ -11,6 +11,11 @@ use xtask::{
 use walkdir::{DirEntry, WalkDir};
 
 #[test]
+fn generated_grammar_is_fresh() {
+    codegen::generate_syntax(Mode::Verify).unwrap();
+}
+
+#[test]
 fn generated_ast_code_is_fresh() {
     codegen::gen_ast(Mode::Verify).unwrap();
 }

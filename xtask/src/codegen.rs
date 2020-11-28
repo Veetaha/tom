@@ -6,9 +6,12 @@
 //! This module's submodules define specific bits that we generate.
 
 mod gen_ast;
+mod ast_src;
+mod gen_syntax;
 mod gen_parser_tests;
 mod gen_symbols;
 
+pub use gen_syntax::generate_syntax;
 pub use gen_ast::gen_ast;
 pub use gen_parser_tests::gen_parser_tests;
 pub use gen_symbols::gen_symbols;
@@ -43,8 +46,12 @@ fn verify_or_overwrite(mode: Mode, file_path: &Path, expected: &str) -> Result<(
     }
 }
 
+const SYNTAX_KINDS: &str = "crates/tom_syntax/src/syntax_kind/generated.rs";
+const AST_NODES: &str = "crates/tom_syntax/src/ast/generated/nodes.rs";
+const AST_TOKENS: &str = "crates/tom_syntax/src/ast/generated/tokens.rs";
+
 const AST_NODES_OUT_FILE_PATH: &str = "crates/tom_syntax/src/ast/generated.rs";
-const SYMBOLS_OUT_FILE_PATH: &str = "crates/tom_syntax/src/symbol/generated.rs";
+const SYNTAX_KINDS_OUT_FILE_PATH: &str = "crates/tom_syntax/src/symbol/generated.rs";
 
 const GRAMMAR_DIR_PATH: &str = "crates/tom_syntax/src/parser/grammar.rs";
 const INLINE_TESTS_OUT_DIR_PATH: &str = "crates/tom_syntax/tests/data/inline";

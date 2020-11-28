@@ -1,63 +1,59 @@
 //! FIXME: write short doc here
 
 use drop_bomb::DebugDropBomb;
-use crate::{parser::Parser, symbol::*, Symbol};
+use crate::{
+    parser::Parser,
+    SyntaxKind::{self, *},
+    T,
+};
 
 struct Mark {
-    symbol: Symbol,
+    kind: SyntaxKind,
     bomb: DebugDropBomb,
 }
 
 impl Mark {
-    fn new(symbol: Symbol) -> Mark {
+    fn new(kind: SyntaxKind) -> Mark {
         Mark {
-            symbol,
+            kind,
             bomb: DebugDropBomb::new("Mark dropped"),
         }
     }
 }
 
 impl<'t, 's> Parser<'t, 's> {
-    fn start(&mut self, s: Symbol) -> Mark {
+    fn start(&mut self, s: SyntaxKind) -> Mark {
         self.sink.start(s);
         Mark::new(s)
     }
 
     fn finish(&mut self, mut m: Mark) {
         m.bomb.defuse();
-        self.sink.finish(m.symbol);
+        self.sink.finish(m.kind);
     }
 
-    fn error(&mut self, msg: &str) {
+    fn error(&mut self, msg: impl Into<String>) {
         self.sink.error(msg);
     }
 
-    fn at(&self, lookahead: usize) -> Symbol {
+    fn at(&self, lookahead: usize) -> SyntaxKind {
         let pos = self.pos + lookahead;
-        if pos >= self.tokens.significant.len() {
+        if pos >= self.tokens.len() {
             return EOF;
         }
-        let pos = self.tokens.significant[pos];
-        self.tokens.raw_tokens[pos].symbol
+        let pos = self.tokens[pos];
+        self.tokens[pos].kind
     }
 
-    fn current(&self) -> Symbol {
+    fn current(&self) -> SyntaxKind {
         self.at(0)
     }
 
-    fn eat(&mut self, s: Symbol) {
-        let msg = match s {
-            COMMA => "expected `,`",
-            EQ => "expected `=`",
-            DOT => "expected `.`",
-            R_BRACK => "expected `]`",
-            R_CURLY => "expected `}`",
-            _ => unimplemented!("msg for {:?}", s),
-        };
+    fn eat(&mut self, s: SyntaxKind) {
         if self.current() == s {
             self.bump()
         } else {
-            self.bump_error(msg)
+            self.bump_error(format!("expected {:?}", s))
         }
     }
 
@@ -70,7 +66,7 @@ impl<'t, 's> Parser<'t, 's> {
         self.pos += 1;
     }
 
-    fn bump_remap(&mut self, s: Symbol) {
+    fn bump_remap(&mut self, s: SyntaxKind) {
         if self.pos == self.tokens.significant.len() {
             panic!("bumping past EOF");
         }
@@ -79,7 +75,7 @@ impl<'t, 's> Parser<'t, 's> {
         self.pos += 1;
     }
 
-    fn bump_error(&mut self, msg: &str) {
+    fn bump_error(&mut self, msg: impl Into<String>) {
         match self.current() {
             EOF => {
                 self.error(msg);
@@ -112,8 +108,8 @@ impl<'s, 't> Parser<'s, 't> {
         self.entries();
         while self.current() != EOF {
             match self.current() {
-                L_BRACK => {
-                    if self.at(1) == L_BRACK {
+                T!['['] => {
+                    if self.at(1) == T!['['] {
                         self.array_table()
                     } else {
                         self.table()
@@ -130,10 +126,9 @@ impl<'s, 't> Parser<'s, 't> {
     // foo = 92
     // 'bar' = 14
     fn entries(&mut self) {
-        while self.current() != EOF && self.current() != L_BRACK {
+        while !matches!(self.current(), EOF | T!['[']) {
             match self.current() {
-                BARE_KEY | BARE_KEY_OR_NUMBER | BARE_KEY_OR_DATE | BASIC_STRING
-                | LITERAL_STRING => self.entry(),
+                BARE_KEY_LIKE | BASIC_LINE_STRING | LITERAL_LINE_STRING => self.entry(),
                 _ => self.bump_error("expected a key"),
             }
         }
@@ -142,7 +137,7 @@ impl<'s, 't> Parser<'s, 't> {
     fn entry(&mut self) {
         let m = self.start(ENTRY);
         self.keys();
-        self.eat(EQ);
+        self.eat(T![=]);
         self.val();
         self.finish(m);
     }
@@ -150,15 +145,17 @@ impl<'s, 't> Parser<'s, 't> {
     // test-keys
     // foo = 1
     // foo.bar = 2
+    // 3.14 = 4.13
+    // 2020-29-06 = 2020-29-06
     fn keys(&mut self) {
         // []
         // [foo]
         // [foo.bar]
         // [foo.]
         let mut first = true;
-        while self.current() != EOF && self.current() != R_BRACK && self.current() != EQ {
+        while !matches!(self.current(), EOF | T![']'] | T![=]) {
             if !first {
-                self.eat(DOT);
+                self.eat(T![.]);
             }
             first = false;
             self.key();
@@ -172,11 +169,11 @@ impl<'s, 't> Parser<'s, 't> {
             // foo = 92
             // 92 = 92
             // 1914-08-26 = 92
-            BARE_KEY | BARE_KEY_OR_NUMBER | BARE_KEY_OR_DATE => self.bump_remap(BARE_KEY),
+            BARE_KEY_LIKE /* TODO: remove | BARE_KEY_OR_NUMBER | BARE_KEY_OR_DATE */ => self.bump_remap(BARE_KEY),
             // test-key-str
             // "foo" = 92
             // 'bar' = 92
-            BASIC_STRING | LITERAL_STRING => self.bump(),
+            BASIC_LINE_STRING | LITERAL_LINE_STRING => self.bump(),
             _ => self.bump_error("expected a key"),
         }
         self.finish(m);
@@ -188,14 +185,17 @@ impl<'s, 't> Parser<'s, 't> {
             // test-val-num
             // a = 92
             // b = 8.5
-            BARE_KEY_OR_NUMBER | NUMBER => self.bump_remap(NUMBER),
+            PLUS | BARE_KEY_LIKE => {
+                // test-date-time
+                // a = 1914-08-26
+                // b = 1979-05-27T07:32:00-08:00
+
+                self.bump_remap(NUMBER)
+            }
             // test-val-bool
             // a = true
             // b = false
-            BOOL => self.bump(),
-            // a = 1914-08-26
-            // b = 1979-05-27T07:32:00-08:00
-            BARE_KEY_OR_DATE | DATE_TIME => self.bump_remap(DATE_TIME),
+            TRUE | FALSE => self.bump(),
             // test-val-str
             // a = "hello\nworld"
             // b = """
@@ -212,7 +212,7 @@ impl<'s, 't> Parser<'s, 't> {
             LITERAL_STRING | MULTILINE_LITERAL_STRING => self.bump(),
             // test-val-array
             // a = [1, "foo"]
-            L_BRACK => self.array(),
+            T!['['] => self.array(),
             // test-val-inline
             // a = { "foo" = 1, bar = 2, }
             L_CURLY => self.dict(),
@@ -224,7 +224,7 @@ impl<'s, 't> Parser<'s, 't> {
     }
 
     fn array(&mut self) {
-        assert_eq!(self.current(), L_BRACK);
+        assert_eq!(self.current(), T!['[']);
         let m = self.start(ARRAY);
         self.bump();
         while self.current() != EOF && self.current() != R_BRACK {
@@ -271,7 +271,7 @@ impl<'s, 't> Parser<'s, 't> {
     // a = 1
     // b = 2
     fn table(&mut self) {
-        assert_eq!(self.current(), L_BRACK);
+        assert_eq!(self.current(), T!['[']);
         let m = self.start(TABLE);
         self.table_header(false);
         self.entries();
@@ -283,7 +283,7 @@ impl<'s, 't> Parser<'s, 't> {
     // a = 1
     // b = 2
     fn array_table(&mut self) {
-        assert!(self.at(0) == L_BRACK && self.at(1) == L_BRACK);
+        assert!(self.at(0) == T!['['] && self.at(1) == T!['[']);
         let m = self.start(ARRAY_TABLE);
         self.table_header(true);
         self.entries();
@@ -293,11 +293,11 @@ impl<'s, 't> Parser<'s, 't> {
     // test-table-header
     // [[table . 'header']]
     fn table_header(&mut self, array: bool) {
-        assert_eq!(self.current(), L_BRACK);
+        assert_eq!(self.current(), T!['[']);
         let m = self.start(TABLE_HEADER);
         self.bump();
         if array {
-            assert_eq!(self.current(), L_BRACK);
+            assert_eq!(self.current(), T!['[']);
             self.bump();
         }
 

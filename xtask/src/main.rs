@@ -37,8 +37,8 @@ fn main() -> Result<()> {
 
     match subcommand.as_str() {
         "codegen" => {
-            codegen::gen_ast(codegen::Mode::Overwrite)?;
-            codegen::gen_symbols(codegen::Mode::Overwrite)?;
+            // TODO: unify naming of gen -> generated
+            codegen::generate_syntax(codegen::Mode::Overwrite)?;
             codegen::gen_parser_tests(codegen::Mode::Overwrite)?;
         }
         "lint" => {
